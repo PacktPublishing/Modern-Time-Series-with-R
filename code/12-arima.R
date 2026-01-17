@@ -1,4 +1,3 @@
-## ----ch12-packages, eval=TRUE, warning=FALSE, message=FALSE, echo=TRUE, purl=TRUE----
 #install.packages("pacman")
 library(pacman)
 p_load("conflicted"
@@ -9,507 +8,420 @@ p_load("conflicted"
        ,"patchwork"
        ,"tidyverse"
        ,"tsibble"
-       ,"tsibbledata"
-      )
+       ,"tsibbledata" )
 
 conflicts_prefer(
-  fabletools::accuracy()
-  ,fabletools::forecast()
-  ,dplyr::filter()
+  fabletools::accuracy,
+  fabletools::forecast,
+  dplyr::filter
 )
 
-theme_set(theme_bw())
 
-
-## ----ch12-ar-1, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
 
 set.seed(345876)
-ar1_dt <- tibble(Time = 1:120,
-                 Values = c(arima.sim(n=120, 
-                            model=list(ar=0.8),
-                            mean = 26))) |> 
-  as_tsibble(index = Time)
+ar1_sim <- tibble(
+  time_index = 1:120,
+  values = c(arima.sim(model = list(ar=0.8),
+             n = 120, 
+             mean = 0,
+             sd = 1))) |> 
+  as_tsibble(index = time_index)
 
 
 
-## ----ch12-ar-2, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Line plot and ACF of an observed series",fig.width=10,fig.height=4, size='tiny'----
-
-ar1_dt |> 
+ar1_sim |>
   gg_tsdisplay(plot_type="partial")
- 
 
 
-## ----ch12-ar-3, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## 
-## ar_manual <- ar1_dt |>
-##   model(manual = ARIMA(Values ~ pdq(3,0,0)))
-## 
-## report(ar_manual)
-## 
-## # Series: Values
-## # Model: ARIMA(3,0,0) w/ mean
-## #
-## # Coefficients:
-## #           ar1     ar2      ar3  constant
-## #       -0.4318  0.0549  -0.2367   24.7394
-## # s.e.   0.1451  0.1644   0.1476    0.1505
-## #
-## # sigma^2 estimated as 1.06:  log likelihood=-61.94
-## # AIC=133.87   AICc=135.45   BIC=142.79
-## 
-## 
-## tidy(ar_manual)
-## 
-## # # A tibble: 4 × 6
-## #   .model term   estimate std.error statistic p.value
-## #   <chr>  <chr>     <dbl>     <dbl>     <dbl>   <dbl>
-## # 1 arima  ar1      -0.432     0.145    -2.98    0.005
-## # 2 arima  ar2       0.055     0.164     0.334   0.74
-## # 3 arima  ar3      -0.237     0.148    -1.60    0.116
-## # 4 arima  const…   24.7       0.151   164.      0
-## 
 
 
-## ----ch12-ar-4, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
+ar_manual <- ar1_sim |> 
+  model(manual = ARIMA(values ~ pdq(1,0,0)))
+
+report(ar_manual)
 ## 
-## ar_auto <- ar1_dt |>
-##   model(auto = ARIMA(Values))
+## Series: values
+## Model: ARIMA(1,0,0)
 ## 
-## report(ar_auto)
+## Coefficients:
+##         ar1
+##       0.780
+## s.e.  0.056
 ## 
-## # Series: Values
-## # Model: ARIMA(1,0,0) w/ mean
-## #
-## # Coefficients:
-## #           ar1  constant
-## #       -0.5688   24.0479
-## # s.e.   0.1206    0.1561
-## #
-## # sigma^2 estimated as 1.105:  log likelihood=-63.79
-## # AIC=133.59   AICc=134.19   BIC=138.94
-## 
-## tidy(ar_auto)
-## 
-## # # A tibble: 2 × 6
-## #   .model term   estimate std.error statistic p.value
-## #   <chr>  <chr>     <dbl>     <dbl>     <dbl>   <dbl>
-## # 1 auto   ar1      -0.569     0.121     -4.72       0
-## # 2 auto   const…   24.0       0.156    154.         0
+## sigma^2 estimated as 0.9266:  log likelihood=-165.66
+## AIC=335.33   AICc=335.43   BIC=340.9
 ## 
 
+tidy(ar_manual)
+## 
+## # A tibble: 1 × 6
+##   .model term  estimate std.error statistic  p.value
+##   <chr>  <chr>    <dbl>     <dbl>     <dbl>    <dbl>
+## 1 manual ar1      0.780    0.0560      13.9 7.51e-27
 
-## ----ch12-diff-noshow,  eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=FALSE, size='tiny'----
-
+data("global_economy")
 usa_gdp <- global_economy |> 
   filter(Code == "USA") |> 
   select(Year, GDP) |> 
-  mutate(GDP = GDP/10^10, 
-         `GDP->(d=1)` = difference(GDP,lag=1,differences=1),
-         `GDP->(d=2)` = difference(GDP,lag=1,differences=2))
-
-# ecm_plot <- usa_gdp |> 
-#    pivot_longer(cols=c(GDP, 
-#                       `GDP(d=1)`,
-#                       `GDP(d=2)`),
-#                 names_to="diff_order",
-#                 values_to="value") |> 
-#   ggplot(aes(x=Year,y=value)) +
-#   geom_line() +
-#   facet_wrap(~diff_order,
-#              ncol = 1, 
-#              scales = "free_y") +
-#   labs(title = "USA GDP with varying degrees of differencing",
-#        y="")
+  rename( year = Year, gdp = GDP) |>
+  mutate(gdp = gdp/10^10, 
+         gdp_diff_1 = difference(gdp, lag = 1, differences = 1),
+         gdp_diff_2 = difference(gdp, lag = 1, differences = 2))
 
 
 
-## ----ch12-diff-1,  eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-usa_gdp <- global_economy |> 
-  filter(Code == "USA") |> 
-  select(Year, GDP) |> 
-  mutate(GDP = GDP/10^10, 
-         `GDP->(d=1)` = difference(GDP,lag=1,differences=1),
-         `GDP->(d=2)` = difference(GDP,lag=1,differences=2))
+usa_gdp
+## 
+## # A tsibble: 58 x 4 [1Y]
+##     year   gdp gdp_diff_1 gdp_diff_2
+##    <dbl> <dbl>      <dbl>      <dbl>
+##  1  1960  54.3      NA        NA
+##  2  1961  56.3       2        NA
+##  3  1962  60.5       4.18      2.18
+##  4  1963  63.9       3.35     -0.830
+##  5  1964  68.6       4.72      1.37
+##  6  1965  74.4       5.79      1.07
+##  7  1966  81.5       7.13      1.34
+##  8  1967  86.2       4.67     -2.46
+##  9  1968  94.2       8.08      3.41
+## 10  1969 102.        7.74     -0.340
+## # ℹ 48 more rows
 
-
-## ----ch12-diff-2, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Impact of differencing on USA GDP (1960-2017) ",fig.width=8,fig.height=6, size='tiny'----
  usa_gdp |> 
-   pivot_longer(cols=c(GDP, 
-                      `GDP->(d=1)`,
-                      `GDP->(d=2)`),
+   pivot_longer(cols=c(gdp, gdp_diff_1, gdp_diff_2),
                 names_to="diff_order",
                 values_to="value") |> 
-  ggplot(aes(x=Year,y=value)) +
-  geom_line(size=0.8) +
-  facet_wrap(~diff_order,
+  mutate(order = factor(diff_order, levels = c("gdp", "gdp_diff_1", "gdp_diff_2"))) |>
+  ggplot(aes(x = year, y = value)) +
+  geom_line(size = 0.8) +
+  facet_wrap(~ diff_order,
              ncol = 1, 
              scales = "free_y") +
-  labs(title = "USA GDP with varying degrees of differencing",
-       y="") +
-  theme(axis.text=element_text(size=12)
-       ,strip.text=element_text(size=12))
+  labs(x = "" , y = "") 
 
 
-
-## ----ch12-diff-3,  eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Visualization of second order differenced USA GDP series",fig.width=10,fig.height=4, size='tiny'----
-## 
-## usa_gdp |>
-##   select(Year, GDP) |>
-##   features(GDP, unitroot_ndiffs )
-## 
-## # # A tibble: 1 × 1
-## #   ndiffs
-## #    <int>
-## # 1      2
-## 
-## usa_gdp |>
-##   select(Year, GDP) |>
-##   mutate(`GDP->log` = log(GDP)) |>
-##   features(`GDP->log`, unitroot_ndiffs )
-## 
-## # # A tibble: 1 × 1
-## #   ndiffs
-## #    <int>
-## # 1      2
-## 
-
-
-## ----ch12-diff-4, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Visualization of second order differenced USA GDP series",fig.width=10,fig.height=4, size='tiny'----
-usa_gdp |> 
-  select(Year, `GDP->(d=2)`) |> 
-  gg_tsdisplay(plot_type="partial") +
-  labs(title = "GDP->(d=2)", 
-       y = "")
-
-
-## ----ch12-diff-5,eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="ACF and PACF of log(GDP) after second order differencing",fig.width=10,fig.height=4, size='tiny'----
 
 usa_gdp <- usa_gdp |> 
-  mutate(`GDP->log->(d=2)` = difference(log(GDP), lag=1, differences=2))
-  
-usa_gdp |> 
-  select(Year, `GDP->log->(d=2)`)|> 
-  gg_tsdisplay(plot_type="partial")+
-  labs(title = "GDP->log->(d=2)", 
-       y="")
+  mutate(gdp_log = log(gdp))
+
+usa_gdp_diff <- usa_gdp |>
+  select(year, gdp, gdp_log) %>% 
+  pivot_longer(cols = c(gdp, gdp_log), 
+               names_to = "series", 
+               values_to = "values") |>
+  group_by(series) |>
+  features(values, unitroot_ndiffs )
 
 
-## ----ch12-ma-1,eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Example of a moving average model",fig.width=10,fig.height=4, size='tiny'----
+usa_gdp_diff
+## 
+## # A tibble: 2 × 2
+##   series  ndiffs
+##   <chr>    <int>
+## 1 gdp          2
+## 2 gdp_log      2
+
+
+
+
+
+usa_gdp <- usa_gdp |>
+  mutate(gdp_log_diff_2 = difference(gdp_log, lag = 1, differences = 2))
+
+usa_gdp |>
+  select(year, gdp_log_diff_2)|>
+  gg_tsdisplay(plot_type = "partial") +
+  labs(x = "", y="")
+
+
+
+
 n <- 120
 set.seed(98765)
-ma_dt <- tibble(Time = 1:n,
-                 y = c(arima.sim(n=n, 
-                            model=list(ar=0.12,
-                            ma=c(0.8,0.45)),
-                            mean=30))) |> 
-  as_tsibble(index = Time)
+ma_sim <- tibble(
+  time = 1:n,
+  y = c(arima.sim(n = n,
+         model=list(ar = 0.12, ma = c(0.8,0.45)),
+         mean = 0 , sd = 1 ))) |>
+  as_tsibble(index = time)
 
-ma_dt |> 
+ma_sim |>
   gg_tsdisplay(plot_type = "partial")
 
 
 
-## ----ch12-ma-2, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## 
-## ma_dt |>
-##   features(y, unitroot_ndiffs)
-## 
-## # # A tibble: 1 × 1
-## #   ndiffs
-## #    <int>
-## # 1      0
-## 
 
 
-## ----ch12-ma-3, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## ma_dt |>
-##   model(ma = ARIMA(y ~ pdq(1,0,2))) |>
-##    tidy() |>
-##    mutate(across(where(is.numeric), round, 3))
-## 
-## # # A tibble: 4 × 6
-## #   .model term  estimate std.error statistic p.value
-## #   <chr>  <chr>    <dbl>     <dbl>     <dbl>   <dbl>
-## # 1 ma     ar1      0.109     0.243     0.448   0.655
-## # 2 ma     ma1      0.855     0.236     3.62    0
-## # 3 ma     ma2      0.407     0.146     2.79    0.006
-## # 4 ma     cons…   68.3       0.206   332.      0
-## 
-## 
-## ma_dt |>
-##   model(ma = ARIMA(y ~ pdq(0,0,2))) |>
-##   tidy() |>
-##    mutate(across(where(is.numeric), round, 3))
-## 
-## # # A tibble: 3 × 6
-## #   .model term  estimate std.error statistic p.value
-## #   <chr>  <chr>    <dbl>     <dbl>     <dbl>   <dbl>
-## # 1 ma     ma1      0.956     0.089     10.8        0
-## # 2 ma     ma2      0.465     0.071      6.53       0
-## # 3 ma     cons…   76.6       0.221    347.         0
-## 
+ma_sim |>
+  features(y, unitroot_ndiffs)
 
 
-## ----ch12-nsarima-1, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
+## # A tibble: 1 × 1
+##   ndiffs
+##    <int>
+## 1      0
 
-usagdp_train <- 
-  usa_gdp |> 
-  select(Year, GDP) |> 
+
+
+ glance(ma_model)
+## 
+## # A tibble: 2 × 8
+##   .model   sigma2 log_lik   AIC  AICc   BIC ar_roots  ma_roots
+##   <chr>     <dbl>   <dbl> <dbl> <dbl> <dbl> <list>    <list>
+## 1 arma_mod   1.04   -171.  351.  351.  362. <cpl [1]> <cpl [2]>
+## 2 ma_mod     1.03   -171.  349.  349.  357. <cpl [0]> <cpl [2]>
+
+tidy(ma_model)
+## 
+## # A tibble: 5 × 6
+##   .model   term  estimate std.error statistic  p.value
+##   <chr>    <chr>    <dbl>     <dbl>     <dbl>    <dbl>
+## 1 arma_mod ar1      0.111    0.242      0.456 6.49e- 1
+## 2 arma_mod ma1      0.854    0.236      3.62  4.26e- 4
+## 3 arma_mod ma2      0.407    0.145      2.80  6.02e- 3
+## 4 ma_mod   ma1      0.956    0.0889    10.8   2.55e-19
+## 5 ma_mod   ma2      0.466    0.0711     6.54  1.55e- 9
+
+
+usagdp_full <- usa_gdp |>
+  select(year, gdp)
+
+usagdp_train <-usagdp_full |>
   filter_index(1960~2007)
 
-usagdp_test <- 
-  usa_gdp |> 
-  select(Year, GDP) |> 
+usagdp_test <- usagdp_full|>
   filter_index(2008~2017)
 
-usagdp_arima <- 
-  usagdp_train |> 
-  model(manual = ARIMA(log(GDP)~pdq(3,2,0)),
-        auto = ARIMA(log(GDP)))
+usagdp_arima <-
+  usagdp_train |>
+  model(arima_121 = ARIMA(log(gdp) ~ pdq(1,2,1)),
+        arima_221 = ARIMA(log(gdp) ~ pdq(2,2,1)),
+        arima_auto = ARIMA(log(gdp)))
 
+usagdp_fcst <- usagdp_arima |>
+  forecast(h=10)
 
+usagdp_fcst_eval <- bind_rows(
+  accuracy(usagdp_arima),
+  accuracy(usagdp_fcst, usagdp_full)
+  )
 
-## ----ch12-nsarima-2, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## 
-## glance(usagdp_arima)
-## 
-## # # A tibble: 2 × 8
-## #   .model   sigma2 log_lik   AIC  AICc   BIC
-## #   <chr>     <dbl>   <dbl> <dbl> <dbl> <dbl>
-## # 1 manual 0.000380    117. -226. -225. -219.
-## # 2 auto   0.000364    117. -230. -230. -227.
-## 
-## tidy(usagdp_arima)
-## 
-## # # A tibble: 4 × 6
-## #   .model term  estimate std.error statistic p.value
-## #   <chr>  <chr>    <dbl>     <dbl>     <dbl>   <dbl>
-## # 1 manual ar1     -0.608     0.149     -4.08   0
-## # 2 manual ar2     -0.44      0.158     -2.78   0.008
-## # 3 manual ar3     -0.204     0.147     -1.39   0.171
-## # 4 auto   ma1     -0.645     0.107     -6.02   0
-
-
-## ----ch12-nsarima-3-noshow, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=FALSE, size='tiny'----
-usagdp_fcst <- 
-  usagdp_arima |> 
-  forecast(h=10) 
-
-
-## ----ch12-nsarima-3, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## usagdp_fcst <-
-##   usagdp_arima |>
-##   forecast(h=10)
-## 
-## accuracy(udagdp_fcst, usagdp_test) |>
-##   select(.model, .type, ME, RMSE, MAPE, ACF1)
-## 
-## # # A tibble: 2 × 6
-## #   .model .type    ME  RMSE  MAPE  ACF1
-## #   <chr>  <chr> <dbl> <dbl> <dbl> <dbl>
-## # 1 auto   Test  -299.  330.  17.4 0.623
-## # 2 manual Test  -323.  357.  18.8 0.626
-## 
-
-
-## ----ch12-nsarima-4, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=FALSE, results='asis', fig.cap="Forecasting USA GDP with an automatically selected ARIMA(0,2,1) and manually selected ARIMA(3,2,0) models",fig.width=10,fig.height=4, size='tiny'----
-nsarima_p1 <-
-  usagdp_fcst |> 
-  autoplot(usagdp_train,
-           level = NULL
-            ,size = 0.9)+
+nsarima_p1 <- usagdp_fcst |>
+  autoplot(usagdp_train, level = NULL,size = 0.9)+
   labs(title="Forecasts with training set")
-  
-nsarima_p2 <-
-  usagdp_fcst |> 
-  autoplot(usagdp_test,
-           level = NULL
-            ,size = 0.9)
+
+nsarima_p2 <- usagdp_fcst |>
+  autoplot(usagdp_test,level = NULL,size = 0.9)
 
  nsarima_p1 + nsarima_p2+
    plot_layout(guides = "collect")+
   labs(title="Forecasts with test set")
-   
-
-
-## ----ch12-sarima-1-noshow, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=FALSE, size='tiny'----
-
-retail <- aus_retail |> 
-  filter(`Series ID`=="A3349397X")  |> 
-  select(Month, Turnover)
-  
-# log and seasonally differenced
-retail <-
-  retail |> 
-  mutate(Turnover_diff = difference(log(Turnover),
-                                    lag=12))
-# fit 
-sarima_fit <- 
-  retail_dt |> 
-  model(manual = ARIMA(log(Turnover)~ pdq(2,0,1) + PDQ(1,1,2)),
-        auto = ARIMA(log(Turnover)))
 
 
 
 
-## ----ch12-sarima-1, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Monthly NSW household goods retailing, 1982-2018",fig.width=10,fig.height=4, size='tiny'----
-
-retail <- 
-  aus_retail |> 
-  filter(`Series ID`=="A3349397X") |> 
-  select(Month, Turnover)
-  
-retail |> 
-  gg_tsdisplay(plot_type = "partial",
-               lag = 36)
 
 
-
-## ----ch12-sarima-2, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
+usagdp_arima
 ## 
-## retail |>
-##   features(log(Turnover), unitroot_ndiffs)
-## # # A tibble: 1 × 1
-## #   ndiffs
-## #    <int>
-## # 1      1
-
-
-## ----ch12-sarima-3, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Seasonally differenced monthly NSW household goods retailing",fig.width=10,fig.height=4, size='tiny'----
-
-retail <-
-  retail |> 
-  mutate(Turnover_diff = difference(log(Turnover),
-                                    lag=12))
-
-retail |> 
-  gg_tsdisplay(Turnover_diff,
-               plot_type="partial",
-               lag=36)
-
-
-## ----ch12-sarima-4, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## 
-## sarima_fit <-
-##   retail |>
-##   model(manual = ARIMA(log(Turnover)~ pdq(2,0,1) + PDQ(1,1,2)),
-##         auto = ARIMA(log(Turnover)))
-## 
-## sarima_fit |>
-##   pivot_longer(everything(),
-##                names_to="model_name",
-##                values_to="model_order")
-## 
-## # # A mable: 2 x 2
-## # # Key:     model_name [2]
-## #   model_name                        model_order
-## #   <chr>                                 <model>
-## # 1 manual     <ARIMA(2,0,1)(1,1,2)[12] w/ drift>
-## # 2 auto       <ARIMA(1,0,1)(2,1,2)[12] w/ drift>
+## # A mable: 1 x 3
+##        arima_121      arima_221     arima_auto
+##          <model>        <model>        <model>
+## 1 <ARIMA(1,2,1)> <ARIMA(2,2,1)> <ARIMA(0,2,1)>
 ## 
 
+glance(usagdp_arima)
+## 
+## # A tibble: 3 × 8
+##   .model       sigma2 log_lik   AIC  AICc   BIC ar_roots  ma_roots
+##   <chr>         <dbl>   <dbl> <dbl> <dbl> <dbl> <list>    <list>
+## 1 arima_121  0.000372    117. -228. -228. -223. <cpl [1]> <cpl [1]>
+## 2 arima_221  0.000374    118. -227. -226. -220. <cpl [2]> <cpl [1]>
+## 3 arima_auto 0.000364    117. -230. -230. -227. <cpl [0]> <cpl [1]>
 
-## ----ch12-sarima-5, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
+tidy(usagdp_arima)
 ## 
-## tidy(sarima_fit) |>
-##   mutate(across(where(is.numeric), round,3 ))
-## 
-## # # A tibble: 14 × 6
-## #    .model term     estimate std.error statistic p.value
-## #    <chr>  <chr>       <dbl>     <dbl>     <dbl>   <dbl>
-## #  1 manual ar1         0.984     0.108     9.10    0
-## #  2 manual ar2        -0.042     0.095    -0.444   0.657
-## #  3 manual ma1        -0.475     0.096    -4.97    0
-## #  4 manual sar1       -0.321     0.378    -0.85    0.396
-## #  5 manual sma1       -0.21      0.367    -0.572   0.568
-## #  6 manual sma2       -0.303     0.217    -1.40    0.163
-## #  7 manual constant    0.004     0.001     7.35    0
-## #  8 auto   ar1         0.939     0.02     46.4     0
-## #  9 auto   ma1        -0.433     0.052    -8.34    0
-## # 10 auto   sar1        0.735     0.323     2.27    0.023
-## # 11 auto   sar2       -0.251     0.079    -3.17    0.002
-## # 12 auto   sma1       -1.28      0.331    -3.86    0
-## # 13 auto   sma2        0.5       0.216     2.32    0.021
-## # 14 auto   constant    0.002     0         6.42    0
-## 
+## # A tibble: 6 × 6
+##   .model     term  estimate std.error statistic     p.value
+##   <chr>      <chr>    <dbl>     <dbl>     <dbl>       <dbl>
+## 1 arima_121  ar1     0.0113     0.206    0.0547 0.957
+## 2 arima_121  ma1    -0.650      0.143   -4.54   0.0000402
+## 3 arima_221  ar1    -0.107      0.248   -0.429  0.670
+## 4 arima_221  ar2    -0.171      0.189   -0.908  0.369
+## 5 arima_221  ma1    -0.528      0.222   -2.38   0.0216
+## 6 arima_auto ma1    -0.645      0.107   -6.02   0.000000275
 
 
-## ----ch12-sarima-6, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Forecasts of monthly NSW household goods retailing using automatically selected ARIMA(1,0,1)(2,1,2)[12] model",fig.width=10,fig.height=4, size='tiny'----
-sarima_fcst <- 
-  sarima_fit |> 
-  select(auto) |> 
+
+usagdp_fcst_eval |>
+  select(.model, .type, ME, RMSE, MASE, ACF1)
+
+## # A tibble: 6 × 6
+##   .model     .type         ME   RMSE   MASE  ACF1
+##   <chr>      <chr>      <dbl>  <dbl>  <dbl> <dbl>
+## 1 arima_121  Training   -1.15   9.30  0.205 0.200
+## 2 arima_221  Training   -1.01   9.24  0.203 0.204
+## 3 arima_auto Training   -1.14   9.33  0.206 0.204
+## 4 arima_121  Test     -299.   330.   10.1   0.623
+## 5 arima_221  Test     -311.   343.   10.5   0.624
+## 6 arima_auto Test     -299.   330.   10.1   0.623
+
+
+
+
+
+
+retail <- aus_retail |>
+  filter(`Series ID`=="A3349397X")  |>
+  select(Month, Turnover) |>
+  rename(month = Month, turnover = Turnover)
+
+retail |>
+  gg_tsdisplay(plot_type = "partial", lag = 36)
+
+# log transformation, non-seasonal and seasonal differences
+retail <- retail |>
+  mutate(turnover_log = log(turnover),
+         seas_diff = difference(turnover_log, differences = 1, lag = 1),
+         nonseas_diff = difference(seas_diff, lag = 12))
+retail |>
+  gg_tsdisplay(nonseas_diff,
+               plot_type="partial", lag=36)
+
+# fit
+sarima_fit <-
+  retail |>
+  model(manual = ARIMA(log(turnover)~ pdq(2,0,1) + PDQ(1,1,2)),
+        auto = ARIMA(log(turnover)))
+
+sarima_fit |>
+  pivot_longer(everything(),
+               names_to="model_name",
+               values_to="model_order")
+
+# forecast
+sarima_fcst <- sarima_fit |>
+  select(auto) |>
   forecast(h = 12)
 
-sarima_fcst |> 
-  autoplot(retail |> 
-           filter(year(Month) >= "2010"),
+sarima_fcst |>
+  autoplot(retail |>
+           filter(year(month) >= "2010"),
            size = 1.2)+
-  labs(title = latex2exp::TeX(paste0("Forecasts of monthly NSW household goods retailing using $ARIMA(1,0,1)(2,1,2)_{12}$ model")))
+  labs(title = latex2exp::TeX(paste0("Forecasts of monthly NSW household goods retailing using $ARIMA(1,0,1)(2,1,2)_{12}$ with a drift term")))
 
 
-## ----ch12-arimax-1, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Qaurterly Australian electricity and gas production, 1956 - 2008",fig.width=10,fig.height=4, size='tiny'----
 
-elct_gas <- 
-aus_production |> 
-  select(Quarter, Electricity, Gas) 
 
-elct_gas_train <- 
-  elct_gas |> 
-  filter(year(Quarter) <= "2008")
 
-elct_gas_test <- 
-  elct_gas |> 
-  filter(year(Quarter) > "2008")
 
-elct_gas_train |> 
-  pivot_longer(cols = c("Electricity", "Gas"),
+
+
+retail |>
+  features(log(turnover),
+           list(unitroot_ndiffs, unitroot_nsdiffs))
+
+## # A tibble: 1 × 2
+##   ndiffs nsdiffs
+##    <int>   <int>
+## 1      1       1
+
+
+
+
+
+
+sarima_fit <- retail |>
+  model(manual = ARIMA(log(turnover)~ pdq(2,1,1) + PDQ(1,1,2)),
+        auto = ARIMA(log(turnover)))
+
+sarima_fit |>
+  pivot_longer(everything(),
+               names_to="model_name",
+               values_to="model_order")
+
+## # A mable: 2 x 2
+## # Key:     model_name [2]
+##   model_name                        model_order
+##   <chr>                                 <model>
+## 1 manual              <ARIMA(2,1,1)(1,1,2)[12]>
+## 2 auto       <ARIMA(1,0,1)(2,1,2)[12] w/ drift>
+
+tidy(sarima_fit)
+## 
+## # A tibble: 13 × 6
+##    .model term     estimate std.error statistic   p.value
+##    <chr>  <chr>       <dbl>     <dbl>     <dbl>     <dbl>
+##  1 manual ar1      -0.422    0.255      -1.65   9.91e-  2
+##  2 manual ar2      -0.271    0.0999     -2.71   6.96e-  3
+##  3 manual ma1      -0.0222   0.271      -0.0820 9.35e-  1
+##  4 manual sar1     -0.347    0.368      -0.942  3.47e-  1
+##  5 manual sma1     -0.192    0.359      -0.534  5.93e-  1
+##  6 manual sma2     -0.303    0.210      -1.44   1.50e-  1
+##  7 auto   ar1       0.939    0.0203     46.4    3.41e-169
+##  8 auto   ma1      -0.433    0.0520     -8.34   1.05e- 15
+##  9 auto   sar1      0.735    0.323       2.27   2.35e-  2
+## 10 auto   sar2     -0.251    0.0790     -3.17   1.61e-  3
+## 11 auto   sma1     -1.28     0.331      -3.86   1.30e-  4
+## 12 auto   sma2      0.500    0.216       2.32   2.08e-  2
+## 13 auto   constant  0.00161  0.000250    6.42   3.60e- 10
+
+
+
+
+
+
+elect_gas <- aus_production |>
+  select(Quarter, Electricity, Gas) |>
+  rename(quarter = Quarter,
+         electricity = Electricity,
+         gas = Gas)
+
+elect_gas_train <- elect_gas |>
+  filter(year(quarter) <= "2008")
+
+elect_gas_test <-elect_gas |>
+  filter(year(quarter) > "2008")
+
+elect_gas_train |>
+  pivot_longer(cols = c("electricity", "gas"),
                names_to = "sector",
-               values_to = "production") |> 
-  ggplot(aes(x=Quarter, y = production)) +
+               values_to = "production") |>
+  ggplot(aes(x=quarter, y = production)) +
   geom_line() +
   facet_wrap(sector~., ncol=1, scales="free_y")+
   labs(y="")
 
+# model fit
+elect_gas_fit <-
+  elect_gas_train |>
+  model(arimax = ARIMA(electricity ~ gas))
 
+report(elect_gas_fit)
 
-## ----ch12-arimax-2-noshow, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=FALSE,size='tiny'----
-
-elct_gas_fit <- 
-  elct_gas_train |> 
-  model(arimax = ARIMA(Electricity ~ Gas))
-
-
-## ----ch12-arimax-2, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## 
-## elct_gas_fit <-
-##   elct_gas_train |>
-##   model(arimax = ARIMA(Electricity ~ Gas))
-## 
-## report(elct_gas_fit)
-## # Series: Electricity
-## # Model: LM w/ ARIMA(2,0,0)(1,1,2)[4] errors
-## #
-## # Coefficients:
-## #          ar1     ar2    sar1     sma1    sma2      Gas
-## #       0.4463  0.2223  0.9157  -1.4413  0.5236  37.8759
-## # s.e.  0.0687  0.0836  0.0795   0.1228  0.1032   9.9100
-## #       intercept
-## #        891.3641
-## # s.e.   121.5085
-## #
-## # sigma^2 estimated as 411853:  log likelihood=-1637.14
-## # AIC=3290.28   AICc=3291   BIC=3316.98
-## 
-
-
-## ----ch12-arimax-3, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, results='asis', fig.cap="Forecasts of quarterly Australian electricity production using ARIMA and Gas as exogeneous variable",fig.width=10,fig.height=4, size='tiny'----
-elct_gas_fcst <- 
-  elct_gas_fit |> 
+# forecast
+elect_gas_fcst <- elect_gas_fit |>
   forecast(h = 10,
-           new_data = elct_gas_test |> 
-             select(Quarter, Gas))
+           new_data = elect_gas_test |> select(quarter, gas))
 
-elct_gas_fcst |> 
-  autoplot(elct_gas_train |> 
-             filter(year(Quarter)>= 2000))
+elect_gas_fcst |>
+  autoplot(elect_gas_train |>
+             filter(year(quarter)>= 2000))
 
+
+
+report(elect_gas_fit)
+## 
+## Series: electricity
+## Model: LM w/ ARIMA(2,0,0)(1,1,2)[4] errors
+## 
+## Coefficients:
+##          ar1     ar2    sar1     sma1    sma2      gas
+##       0.4463  0.2223  0.9157  -1.4413  0.5236  37.8759
+## s.e.  0.0687  0.0836  0.0795   0.1228  0.1032   9.9100
+##       intercept
+##        891.3641
+## s.e.   121.5085
+## 
+## sigma^2 estimated as 411853:  log likelihood=-1637.14
+## AIC=3290.28   AICc=3291   BIC=3316.98

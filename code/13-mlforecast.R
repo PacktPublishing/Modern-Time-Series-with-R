@@ -1,4 +1,3 @@
-## ----ch13-packages, eval=TRUE, warning=FALSE, message=FALSE, echo=TRUE, purl=TRUE----
 #install.packages("pacman")
 library(pacman)
 p_load("conflicted"
@@ -15,115 +14,102 @@ p_load("conflicted"
        ,"forecastML"
        ,"glmnet"
        ,"hqreg"
-       ,"fable.prophet"
-      )
+       ,"fable.prophet" )
 
 conflicts_prefer(
-  fabletools::accuracy()
-  ,fabletools::forecast()
-  ,fabletools::components()
-  ,dplyr::filter()
+  fabletools::accuracy,
+  fabletools::forecast,
+  fabletools::components,
+  dplyr::filter,
+  tsibble::difference,
+  tsibble::index,
+  dplyr::last,
+  dplyr::select
 )
 
-theme_set(theme_bw())
 
 
 
-
-## ----ch13-2, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny' , results='asis', fig.cap="Autocorrelation plot of lynx data.", fig.width=8,fig.height=4----
-lynx_tsb <- lynx |> 
-  as_tsibble() |> 
+lynx_tsb <- lynx |>
+  as_tsibble() |>
   rename(year = index,
          lynx_count = value)
 
-ggAcf(lynx_tsb, lag.max = 36) + 
-  labs(title = "")
+lynx_tsb |>
+ gg_tsdisplay(plot_type = "partial", lag = 36)
 
 
-## ----ch13-3, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
+
 lynx_train <- lynx_tsb |> filter(year < 1920)
 lynx_test <- lynx_tsb |> filter(year >= 1920)
 
-
-## ----ch13-4, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-set.seed(12345); lynx_mods <- 
-  lynx_train |> 
+set.seed(12345)
+lynx_mods <- lynx_train |> 
   model(ets_model = ETS(sqrt(lynx_count)),
         arima_model = ARIMA(sqrt(lynx_count)),
         nnetar = NNETAR(sqrt(lynx_count)))
 
+lynx_mods
+## 
+## # A mable: 1 x 3
+##      ets_model            arima_model      nnetar
+##        <model>                <model>     <model>
+## 1 <ETS(M,A,N)> <ARIMA(2,0,2) w/ mean> <NNAR(8,4)>
 
-## ----ch13-5, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=FALSE, size='tiny'----
 set.seed(67890); lynx_fcst <- lynx_mods |> 
   forecast(h = nrow(lynx_test)*2)
 
 
-## ----ch13-6, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny' , results='asis', fig.cap="Forecasted lynx count by alternative approaches.", fig.width=8,fig.height=4----
-lynx_fcst |> 
-    autoplot(lynx_train, level = NULL, size = 0.9) + 
-    facet_wrap(~.model, ncol = 1, scales = "free_y") + 
-    labs(y = "Lynx count", x = "Year") + 
-    theme(legend.position = "none")
+
+bind_rows(
+  accuracy(lynx_mods),
+  accuracy(lynx_fcst |> filter(year <= 1934),
+           lynx_test)) |>
+  select(.model, .type, ME, RMSE, MAPE, ACF1)
 
 
-## ----ch13-7, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## lynx_mods |>
-##   accuracy() |>
-##   select(.model, .type, ME, RMSE, MAPE, MASE, ACF1)
-## 
-## # # A tibble: 3 × 7
-## #   .model       .type        ME  RMSE  MAPE  MASE    ACF1
-## #   <chr>        <chr>     <dbl> <dbl> <dbl> <dbl>   <dbl>
-## # 1 ets_model    Training -242.  1318. 119.  1.02   0.374
-## # 2 arima_model  Training   83.4  856.  61.7 0.631 -0.0395
-## # 3 nnetar       Training   31.0  294.  24.1 0.208 -0.106
+## # A tibble: 6 × 6
+##   .model      .type        ME  RMSE  MAPE    ACF1
+##   <chr>       <chr>     <dbl> <dbl> <dbl>   <dbl>
+## 1 ets_model   Training -242.  1318. 119.   0.374
+## 2 arima_model Training   83.4  856.  61.7 -0.0395
+## 3 nnetar      Training   31.0  294.  24.1 -0.106
+## 4 arima_model Test      -43.4  893. 103.   0.578
+## 5 ets_model   Test      984.  1449.  49.6  0.689
+## 6 nnetar      Test     -472.  1166. 108.   0.686
 ## 
 
-
-## ----ch13-8, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## accuracy(lynx_fcst, lynx_test)  |>
-##   select(.model, .type, ME, RMSE, MAPE, ACF1)
-## 
-## # # A tibble: 3 × 6
-## #   .model       .type     ME  RMSE  MAPE  ACF1
-## #   <chr>        <chr>  <dbl> <dbl> <dbl> <dbl>
-## # 1 arima_model  Test   -43.4  893. 103.  0.578
-## # 2 ets_model    Test   984.  1449.  49.6 0.689
-## # 3 nnetar       Test  -472.  1166. 108.  0.686
-## 
-
-
-## ----ch13-9, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny' , results='asis', fig.cap="Foreasts with 95% prediction interval by alternative approaches.", fig.width=8,fig.height=4----
-lynx_fcst |> 
-  filter(.model  != "ets_model") |>
-  autoplot(lynx_tsb, level = 95, size = 0.9) + 
+lynx_fcst |>
+  filter(.model  %in% c("arima_model", "nnetar")) |>
+  autoplot(lynx_tsb, level = 95, size = 0.9) +
   facet_wrap(~.model, ncol = 1, scales = "free_y") +
-    labs(y = "Lynx count", x = "Year") + 
+    labs(y = "Lynx count", x = "") +
     theme(legend.position = "none")
 
 
-## ----ch13-10, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-apDat <- AirPassengers |> 
+
+
+
+apdf <- AirPassengers |> 
   as_tsibble() |> 
   rename(passengers = value) |> 
   mutate(year = lubridate::year(index),
          month = lubridate::month(index)) |>
-  as_tibble() |>
-  select(-index)
+   tibble() |> 
+   select( - index)
+  
 
+trn_idx <- 132
+horizons <- 36
 
-## ----ch13-11, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## horizons <- 36
-
-
-## ----ch13-12-noshow, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=FALSE, size='tiny', results='hide'----
 forecasts_store <- list(NA)
 tau_vec <- c(0.05, 0.5, 0.95)
 horizons <- 36
 trn_idx <- 132
+cv_nfolds <- 10
 for (k in 1:length(tau_vec)) {
   # Step 1: Create data and build model
-  data_train <- create_lagged_df(apDat |> 
+  data_train <- create_lagged_df(apdf |> 
                                    slice(1:trn_idx), 
                                  type = "train", 
                                  method = "direct",
@@ -135,11 +121,13 @@ for (k in 1:length(tau_vec)) {
     x <- as.matrix(data[, -1, drop = FALSE])
     y <- as.matrix(data[, 1, drop = FALSE])
     if (tau_vec[[k]] == 0.5) {
-      model <- cv.glmnet(x, y, type.measure = "mse")
+      model <- cv.glmnet(x, y, type.measure = "mse",
+                         nfolds = cv_nfolds) 
     }else{
-      model <- cv.hqreg(x, y, type.measure = "mse",
+     model <- cv.hqreg(x, y, type.measure = "mse",
                         tau = tau_vec[k],
-                        method = "quantile")
+                        method = "quantile",
+                         nfolds = cv_nfolds)
     }
   }
   windows <- create_windows(data_train,
@@ -151,7 +139,7 @@ for (k in 1:length(tau_vec)) {
                 model_function = model_fn_cust)
   
   # Step 2: forecast
-  feature_data <- create_lagged_df(apDat |> 
+  feature_data <- create_lagged_df(apdf |> 
                                         slice(1:trn_idx), 
                                       type = "forecast", 
                                       method = "direct",
@@ -169,296 +157,298 @@ for (k in 1:length(tau_vec)) {
                             data = feature_data)
   
   # Step 3: combine
-  comb_forecasts <- combine_forecasts(data_forecasts)
-  forecasts_store[[k]] <- comb_forecasts
+  forecasts_store[[k]] <- combine_forecasts(data_forecasts)
 }
 
+trn_idx <- 132
+data_train <- create_lagged_df(
+  apdf |> slice(1:trn_idx),
+  type = "train",
+  method = "direct",
+  outcome_col = 1,
+  lookback = 1:(max(horizons) + 3),
+  horizons = 1:horizons)
 
-## ----ch13-13, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## trn_idx <- 132
-## data_train <- create_lagged_df(apDat |>
-##                                  slice(1:trn_idx),
-##                                type = "train",
-##                                method = "direct",
-##                                outcome_col = 1,
-##                                lookback = 1:(max(horizons) + 3),
-##                                horizons = 1:horizons)
-
-
-## ----ch13-14, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## model_fn_init <- function(data){
-##   x <- as.matrix(data[, -1, drop = FALSE])
-##   y <- as.matrix(data[, 1, drop = FALSE])
-##   model <- glmnet(x, y, type.measure = "mse")
-## }
-
-
-## ----ch13-15, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## model_fn_cust <- function(data, outcome_col = 1) {
-##   x <- as.matrix(data[, -outcome_col, drop = FALSE])
-##   y <- as.matrix(data[, outcome_col, drop = FALSE])
-##   if(tau_vec[[k]] == 0.5){
-##     model <- cv.glmnet(x, y, type.measure = "mse")
-##   }else{
-##     model <- cv.hqreg(x, y, type.measure = "mse",
-##                       tau = tau_vec[k],
-##                       method = "quantile")
-##   }
-## }
-
-
-## ----ch13-16, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## windows <- create_windows(data_train,
-##                           window_length = 0)
-## set.seed(54321);model_results <-
-##   train_model(data_train,
-##               windows,
-##               model_name = "glmnetQuant",
-##               model_function = model_fn_cust)
-
-
-## ----ch13-17, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## feature_data <- create_lagged_df(apDat |>
-##                                       slice(1:trn_idx),
-##                                     type = "forecast",
-##                                     method = "direct",
-##                                     outcome_col = 1,
-##                                     lookback = 1:(max(horizons) + 3),
-##                                     horizons = 1:horizons)
+dim(data_train[[1]])
+## [1]  93 118
 ## 
-## # Prediction function for ML model
-## predict_fn <- function(model, data) {
-##   data_pred <- as.data.frame(predict(model, as.matrix(data)))
-## }
-## 
-## data_forecasts <- predict(model_results,
-##                           prediction_function = list(predict_fn),
-##                           data = feature_data)
-## 
-## # Step 3 of forecastML - combine
-## data_forecasts <- combine_forecasts(data_forecasts)
+dim(data_train[[36]])
+## [1] 93 13
 
 
-## ----ch13-18, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## forecasts_store <- list(NA)
-## tau_vec <- c(0.025, 0.5, 0.975)
-## horizons <- 36
-## trn_idx <- 132
-## for (k in 1:length(tau_vec)) {
-##   # Step 1: Create data and build model
-##   data_train <- create_lagged_df(apDat |>
-##                                    slice(1:trn_idx),
-##                                  type = "train",
-##                                  method = "direct",
-##                                  outcome_col = 1,
-##                                  lookback = 1:(max(horizons) + 3),
-##                                  horizons = 1:horizons)
-##   # Model wrapper for mean and quantile model
-##   model_fn_cust <- function(data, outcome_col = 1) {
-##     x <- as.matrix(data[, -outcome_col, drop = FALSE])
-##     y <- as.matrix(data[, outcome_col, drop = FALSE])
-##     if(tau_vec[[k]] == 0.5){
-##       model <- cv.glmnet(x, y, type.measure = "mse")
-##     }else{
-##       model <- cv.hqreg(x, y, type.measure = "mse",
-##                         tau = tau_vec[k],
-##                         method = "quantile")
-##     }
-##   }
-##   windows <- create_windows(data_train,
-##                             window_length = 0)
-##   set.seed(54321);model_results <-
-##     train_model(data_train,
-##                 windows,
-##                 model_name = "glmnetQuant",
-##                 model_function = model_fn_cust)
-## 
-##   # Step 2: forecast
-##   feature_data <- create_lagged_df(apDat |>
-##                                         slice(1:trn_idx),
-##                                       type = "forecast",
-##                                       method = "direct",
-##                                       outcome_col = 1,
-##                                       lookback = 1:(max(horizons) + 3),
-##                                       horizons = 1:horizons)
-## 
-##   # Prediction function for ML model
-##   predict_fn <- function(model, data) {
-##     data_pred <- as.data.frame(predict(model, as.matrix(data)))
-##   }
-## 
-##   data_forecasts <- predict(model_results,
-##                             prediction_function = list(predict_fn),
-##                             data = feature_data)
-## 
-##   # Step 3: combine
-##   comb_forecasts <- combine_forecasts(data_forecasts)
-##   forecasts_store[[k]] <- comb_forecasts
-## }
 
+apdf_full <- AirPassengers |> 
+  as_tsibble() |> 
+  rename(year_month = index, passengers = value)
 
-## ----ch13-19, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny' , results='asis', fig.cap="Machine learning based forecast and 95% prediction interval for Airpassengers data.", fig.width=8,fig.height=4----
-fore_yr_mnth <- yearmonth(zoo::as.Date(time(AirPassengers)))[trn_idx+1] + c(1:horizons)
-obsfore <- apDat |> 
-  mutate(year_month = yearmonth(zoo::as.Date(time(AirPassengers)))) |> 
-  select(year_month, passengers) |> 
+future_yrmn <- seq(yearmonth(apdf_full$year_month[trn_idx]+1), 
+                     length.out = horizons, by = 1)
+
+apdf_obs_pred <- apdf_full |> 
+  filter(year_month >= yearmonth("1954 Jan")) |> 
   full_join(forecasts_store[[1]] |>
-              mutate(year_month = fore_yr_mnth) |> 
-              select(year_month,
-                     lower = passengers_pred)) |> 
+              mutate(year_month = future_yrmn) |> 
+              select(year_month, lower = passengers_pred)) |> 
   full_join(forecasts_store[[2]] |>
-              mutate(year_month = fore_yr_mnth) |> 
-              select(year_month,
-                     mean = passengers_pred)) |> 
-  full_join(forecasts_store[[3]] |>
-              mutate(year_month = fore_yr_mnth) |> 
-              select(year_month,
-                     upper = passengers_pred))
-
-obsfore |> 
+              mutate(year_month = future_yrmn) |> 
+              select(year_month, mean = passengers_pred)) |> 
+   full_join(forecasts_store[[3]] |>
+              mutate(year_month = future_yrmn) |> 
+              select(year_month, upper = passengers_pred)) 
+  
+apdf_obs_pred |> 
   ggplot(aes(x = year_month, y = passengers)) +
   geom_line() +
   geom_line(aes(y = mean), col = "navy", linewidth = 1) +
   geom_ribbon(aes(ymin = lower, ymax = upper), fill = "navy", alpha = 0.3) +
+   geom_vline(xintercept = as.Date(yearmonth("1960 Jan")), 
+             color = "grey", linetype = "dashed", linewidth = 0.8)
   labs(y = "Air passengers count (in 000's)")
 
 
-## ----ch13-20, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-aus_food_retail <- tsibbledata::aus_retail |> 
+aus_food_retail <- tsibbledata::aus_retail |>
   filter(Industry == "Food retailing") |>
-  index_by(Month) |> 
-  summarise(National_turnover = sum(Turnover, na.rm=T)) |> 
+  index_by(Month) |>
+  summarise(National_turnover = sum(Turnover, na.rm=T)) |>
   filter(Month > yearmonth("1999 Dec"))
-aus_food_retail_train <- aus_food_retail |> 
+
+aus_food_retail_train <- aus_food_retail |>
   filter(Month < yearmonth("2016 Jan"))
-aus_food_retail_test <- aus_food_retail |> 
+
+aus_food_retail_test <- aus_food_retail |>
   filter(Month >= yearmonth("2016 Jan"))
 
-
-## ----ch13-21, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-fit <- aus_food_retail_train %>%
+# model fit
+foodretail_fit <- aus_food_retail_train %>%
   model(
     arima = ARIMA(National_turnover),
     ets = ETS(National_turnover),
-    prophet = prophet(National_turnover ~ growth("linear") + 
-                        season(period = 12, order = 4, 
+    prophet = prophet(National_turnover ~ growth("linear") +
+                        season(period = 12, order = 4,
                                type = "multiplicative"))
   )
-fc <- fit %>%
+foodretail_fc <- foodretail_fit %>%
   forecast(h = "3 years")
 
-
-## ----ch13-22, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny' , results='asis', fig.cap="Prophet decomposition of national retil turnover.", fig.width=8, fig.height=6----
-fit |> 
-  select(prophet) |> 
-  fabletools::components() |> 
+# prophet component plot
+foodretail_fit |>
+  select(prophet) |>
+  fabletools::components() |>
   autoplot()
 
+# accuracy
+bind_rows(
+    accuracy(foodretail_mod),
+    accuracy(foodretail_fc,aus_food_retail))
 
-## ----ch13-23, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## # Training accuracy
-## fit |>
-##   accuracy() |>
-##   select(.model, .type, RMSE, MAPE, MASE, ACF1)
-## 
-## # # A tibble: 3 × 6
-## #   .model  .type     RMSE  MAPE  MASE     ACF1
-## #   <chr>   <chr>    <dbl> <dbl> <dbl>    <dbl>
-## # 1 arima   Training 111.   1.24 0.230  0.0102
-## # 2 ets     Training  95.8  1.14 0.205  0.00735
-## # 3 prophet Training 204.   2.41 0.462 -0.616
-## 
-## # Test accuracy
-## fc |>
-##   accuracy(aus_food_retail) |>
-##   select(.model, .type, RMSE, MAPE, MASE, ACF1)
-## 
-## # # A tibble: 3 × 6
-## #   .model  .type  RMSE  MAPE  MASE     ACF1
-## #   <chr>   <chr> <dbl> <dbl> <dbl>    <dbl>
-## # 1 arima   Test   194.  1.65 0.466 -0.0837
-## # 2 ets     Test   194.  1.67 0.469 -0.00199
-## # 3 prophet Test   326.  2.72 0.773 -0.724
-
-
-## ----ch13-24, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny' , results='asis', fig.cap="Residuals of Prophet method.", fig.width=8,fig.height=4----
-fit |> 
-  select(prophet) |> 
+# residual diagnostic
+foodretail_fit |>
+  select(prophet) |>
   gg_tsresiduals()
 
 
-## ----ch13-25, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-ap_tibble <- AirPassengers |>  
-  as_tsibble() |> 
+
+
+
+## # A tibble: 6 × 6
+##   .model  .type     RMSE      MPE  MASE     ACF1
+##   <chr>   <chr>    <dbl>    <dbl> <dbl>    <dbl>
+## 1 arima   Training 111.  -0.0394  0.230  0.0102
+## 2 ets     Training  95.8  0.00259 0.205  0.00735
+## 3 prophet Training 204.  -0.0672  0.462 -0.616
+## 4 arima   Test     194.  -1.23    0.466 -0.0837
+## 5 ets     Test     194.  -1.40    0.469 -0.00199
+## 6 prophet Test     327.  -1.31    0.776 -0.727
+
+foodretail_fit |>
+  select(prophet) |>
+  gg_tsresiduals()
+
+
+
+# training and test set
+ap_tsb <- AirPassengers |>
+  as_tsibble() |>
   rename(month = index, passenger_count = value)
-ap_train <- ap_tibble |> 
+ap_train <- ap_tsb |>
   filter(month < yearmonth("1957 Jan"))
+ap_test <- ap_tsb |>
+  filter(month >= yearmonth("1957 Jan"))
 
-
-## ----ch13-26, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
+# fit model
 ap_models <- ap_train |>
   model(
     snaive = SNAIVE(passenger_count),
     tslm = TSLM(log(passenger_count) ~ trend() + season()),
     ets = ETS(log(passenger_count) ~ season("A")),
     arima = ARIMA(log(passenger_count)),
-    prophet = prophet(passenger_count ~ growth("linear") + 
-                        season(period = 12, order = 4, 
+    prophet = prophet(passenger_count ~ growth("linear") +
+                        season(period = 12, order = 4,
                                type = "multiplicative"))
     ) |>
   mutate(ensemble = (snaive + tslm + ets + arima + prophet) / 5)
-# Derive forecast for 4 years
-ap_fc <- ap_models |>
-  forecast(h = "4 years") |> 
+
+# forecast
+ap_fcst <- ap_models |>
+  forecast(h = "4 years") |>
   mutate(.model = str_c(.model, "_forecast"))
 
-
-## ----ch13-27, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny' , results='asis', fig.cap="Forecasts by alterantive appraoches.", fig.width=8,fig.height=4----
-ap_fc |>
-  autoplot(ap_tibble,
-           level = NULL) +
+# plot
+ap_fcst |>
+  autoplot(level = NULL, color = "black", linewidth = 0.9 ) +
+  scale_color_manual(values = c("black"= "black")) +
+  autolayer(ap_tsb |> filter(month >= yearmonth("1955 Jan")),
+            linetype = 3 ) +
   facet_wrap(.model~.) +
-  labs(y = "Air passengers count (in 000's)", 
-       x  = "Year-Month") +
+  labs(x  = "",
+       y = "Air passengers count (in 000's)") +
   theme(legend.position = "none")
 
+# accuracy
+ap_fcst |>
+  accuracy(ap_tsb) |>
+  select(.model, .type, RMSE, MAPE, MASE) |>
+  arrange(RMSE)
 
-## ----ch13-28, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## ap_fc |>
-##   accuracy(ap_tibble) |>
-##   arrange(RMSE) |>
-##   select(.model, .type, RMSE, MAPE, MASE)
+
+
+
+
+
+ap_models
 ## 
-## # # A tibble: 6 × 5
-## #   .model            .type  RMSE  MAPE  MASE
-## #   <chr>             <chr> <dbl> <dbl> <dbl>
-## # 1 ensemble_forecast Test   23.4  4.74 0.644
-## # 2 prophet_forecast  Test   32.1  6.68 0.893
-## # 3 ets_forecast      Test   39.4  8.08 1.12
-## # 4 arima_forecast    Test   55.1 11.2  1.60
-## # 5 tslm_forecast     Test   59.6 12.4  1.75
-## # 6 snaive_forecast   Test   97.8 19.6  2.92
+## # A mable: 1 x 6
+##     snaive    tslm          ets
+##    <model> <model>      <model>
+## 1 <SNAIVE>  <TSLM> <ETS(A,A,A)>
+## 
+##                               arima
+##                             <model>
+## 1 <ARIMA(2,0,0)(0,1,1)[12] w/ drift>
+## 
+##        prophet       ensemble
+##        <model>        <model>
+## 1    <prophet>  <COMBINATION>
 
 
-## ----ch13-28a, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## # # A tibble: 5 × 5
-## #   .model               .type  RMSE  MAPE  MASE
-## #   <chr>                <chr> <dbl> <dbl> <dbl>
-## # 1 combination_forecast Test   21.9  4.39 0.601
+
+ap_fcst |>
+  filter(row_number() <= 6 | row_number() > (n()-6))
+
+## # A fable: 12 x 4 [1M]
+## # Key:     .model [2]
+##    .model               month passenger_count .mean
+##    <chr>                <mth>          <dist> <dbl>
+##  1 snaive_forecast   1957 Jan    N(284, 1071)  284
+##  2 snaive_forecast   1957 Feb    N(277, 1071)  277
+##  3 snaive_forecast   1957 Mar    N(317, 1071)  317
+##  4 snaive_forecast   1957 Apr    N(313, 1071)  313
+##  5 snaive_forecast   1957 May    N(318, 1071)  318
+##  6 snaive_forecast   1957 Jun    N(374, 1071)  374
+##  7 ensemble_forecast 1960 Jul         608.542  609.
+##  8 ensemble_forecast 1960 Aug        599.8902  600.
+##  9 ensemble_forecast 1960 Sep        535.9316  536.
+## 10 ensemble_forecast 1960 Oct        465.2943  465.
+## 11 ensemble_forecast 1960 Nov        411.8913  412.
+## 12 ensemble_forecast 1960 Dec         468.112  468.s
 
 
-## ----ch13-29, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-set.seed(98765);ap_sims <- ap_train |>
+
+
+
+## # A tibble: 6 × 5
+##   .model            .type  RMSE  MAPE  MASE
+##   <chr>             <chr> <dbl> <dbl> <dbl>
+## 1 ensemble_forecast Test   23.4  4.73 0.643
+## 2 prophet_forecast  Test   32.2  6.70 0.896
+## 3 ets_forecast      Test   39.4  8.08 1.12
+## 4 arima_forecast    Test   55.1 11.2  1.60
+## 5 tslm_forecast     Test   59.6 12.4  1.75
+## 6 snaive_forecast   Test   97.8 19.6  2.92
+
+
+# fit model
+ap_mod_revised <- ap_train |>
   model(
     snaive = SNAIVE(passenger_count),
     tslm = TSLM(log(passenger_count) ~ trend() + season()),
     ets = ETS(log(passenger_count) ~ season("A")),
-    arima = ARIMA(log(passenger_count))
-  ) |>
-  mutate(ensemble = (snaive + tslm + ets + arima) / 4) |>
+    arima = ARIMA(log(passenger_count))    ) |>
+  mutate(ensemble = (snaive + tslm + ets + arima ) / 4)
+
+# forecast
+ap_fcst_revised <- ap_mod_revised |>
+  forecast(h = "4 years") |>
+  mutate(.model = str_c(.model, "_forecast"))
+
+# accuracy
+ap_accuracy_revised <- ap_fcst_revised |>
+  accuracy(ap_tsb) |>
+  select(.model, .type, RMSE, MAPE, MASE) |>
+  arrange(MASE)
+
+# prediction interval
+set.seed(98765); ap_sims <- ap_mod_revised |>
+  fabletools::generate(h = "4 years", times = 1000) |>
+  mutate(.model = str_c(.model, "_prediction_interval")) |>
+  tibble() |>
+  group_by(month, .model) |>
+  summarise(
+    dist = distributional::dist_sample(list(.sim))) |>
+  ungroup() |>
+  as_fable(index = month, key = .model,
+           distribution = dist,
+           response = "passenger_count")
+
+
+# interval accuracy
+interval_accuracy <- ap_sims |>
+  accuracy(ap_tsb,
+           measures = interval_accuracy_measures,
+           level = 95) |>
+  select(-pinball, -scaled_pinball) |>
+  arrange(winkler)
+
+
+
+
+
+
+# fit model
+ap_mod_revised <- ap_train |>
+  model(
+    snaive = SNAIVE(passenger_count),
+    tslm = TSLM(log(passenger_count) ~ trend() + season()),
+    ets = ETS(log(passenger_count) ~ season("A")),
+    arima = ARIMA(log(passenger_count))    ) |>
+  mutate(ensemble = (snaive + tslm + ets + arima ) / 4)
+
+# forecast 
+ap_fcst_revised <- ap_mod_revised |>
+  forecast(h = "4 years") |> 
+  mutate(.model = str_c(.model, "_forecast"))
+
+# accuracy 
+ap_accuracy_revised <- ap_fcst_revised |>
+  accuracy(ap_tsb) |>
+  select(.model, .type, RMSE, MAPE, MASE) |> 
+  arrange(MASE) 
+
+ap_accuracy_revised
+## 
+## # A tibble: 5 × 5
+##   .model            .type  RMSE  MAPE  MASE
+##   <chr>             <chr> <dbl> <dbl> <dbl>
+## 1 ensemble_forecast Test   21.9  4.39 0.601
+## 2 ets_forecast      Test   39.4  8.08 1.12
+## 3 arima_forecast    Test   55.1 11.2  1.60
+## 4 tslm_forecast     Test   59.6 12.4  1.75
+## 5 snaive_forecast   Test   97.8 19.6  2.92
+
+set.seed(98765); ap_sims <- ap_mod_revised |> 
   fabletools::generate(h = "4 years", times = 1000) |> 
   mutate(.model = str_c(.model, "_prediction_interval")) |> 
-  as_tibble() |>
+  tibble() |>
   group_by(month, .model) |>
   summarise(
     dist = distributional::dist_sample(list(.sim))) |>
@@ -467,31 +457,30 @@ set.seed(98765);ap_sims <- ap_train |>
            distribution = dist, 
            response = "passenger_count")
 
-
-## ----ch13-30, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny' , results='asis', fig.cap="Prediction interval for forecast ensemble.", fig.width=8,fig.height=4----
 ap_sims |>
   filter(.model == "ensemble_prediction_interval") |>
-  autoplot(ap_tibble,
+  autoplot(ap_tsb |> filter(month >= yearmonth("1954 Jan")),
            level = 95) +
+  geom_vline(xintercept = as.Date(yearmonth("1957 Jan")), 
+             color = "grey", linetype = "dashed", linewidth = 0.8) +
   labs(y = "Air passengers count (in 000's)", 
-       x  = "Year-Month") +
+       x  = "") +
   theme(legend.position = "none")
 
+interval_accuracy <- ap_sims |>
+  accuracy(ap_tsb,
+           measures = interval_accuracy_measures,
+           level = 95) |>
+  select(-pinball, -scaled_pinball) |>
+  arrange(winkler)
 
-## ----ch13-31, eval=FALSE, cache=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=TRUE, size='tiny'----
-## ap_sims |>
-##   accuracy(ap_tibble,
-##            measures = interval_accuracy_measures,
-##            level = 95) |>
-##   select(-pinball, -scaled_pinball) |>
-##   arrange(winkler)
-## 
-## # # A tibble: 5 × 3
-## #   .model                       .type winkler
-## #   <chr>                        <chr>   <dbl>
-## # 1 ensemble_prediction_interval Test     127.
-## # 2 ets_prediction_interval      Test     190.
-## # 3 arima_prediction_interval    Test     356.
-## # 4 tslm_prediction_interval     Test     777.
-## # 5 snaive_prediction_interval   Test    1653.
 
+interval_accuracy
+## # A tibble: 5 × 3
+##   .model                       .type winkler
+##   <chr>                        <chr>   <dbl>
+## 1 ensemble_prediction_interval Test     127.
+## 2 ets_prediction_interval      Test     190.
+## 3 arima_prediction_interval    Test     356.
+## 4 tslm_prediction_interval     Test     777.
+## 5 snaive_prediction_interval   Test    1653.

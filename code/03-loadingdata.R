@@ -1,310 +1,316 @@
-## ----chap3-loadpackage, eval=TRUE, warning=FALSE, message=FALSE, purl=TRUE, echo=FALSE----
 #install.packages("pacman")
-library(pacman)
-p_load("forecast"
-       )
-
-
-
-##----data-io1, eval=FALSE, warning=FALSE, message=FALSE, purl=TRUE---------------
+p_load(
+  "DBI",
+  "dbplyr",
+  "forecast",
+  "fst",
+  "glue",
+  "keyring",
+  "nycflights13",
+  "readxl",
+  "RSQLite",
+  "ROracle",
+  "tidyverse" )
 
 # lists of objects in global environment
 ls()
 
-## clear R workspace
- rm(list = ls())
+# clear R workspace
+rm(list = ls())
 
-## prints root directory
- getwd()
+# prints root directory
+getwd()
 
-
-## ----data-io2
 # check existence of data folder
- dir.exists("data")
- dir.create("data")
+dir.exists("data")
+dir.create("data")
 
 
-## ----data-io3
- 
- if(dir.exists(paste0(getwd(), "/data/data_chap3"))){
-  data_path <- paste0(getwd(), "/data/data_chap3")
-}else{
-  dir.create(paste0(getwd(), "/data/data_chap3"))
-  data_path <- paste0(getwd(), "/data/data_chap3")
+# Check if the folder exists and create if it doesn't
+
+if (dir.exists(file.path(getwd(), "data", "data_chap3"))){
+  data_path <- file.path(getwd(), "data", "data_chap3")
+} else {
+  dir.create(file.path(getwd(), "data", "data_chap3"), 
+             recursive = TRUE)
+  data_path <- file.path(getwd(), "data", "data_chap3")
 }
 
 
-## ----data-io4
- 
- saveRDS(mtcars
-        ,file = paste0(data_path,"/mtcars.rds"))
+saveRDS(mtcars,
+        file = file.path(data_path,"mtcars.rds"))
 
-saveRDS(list(mtcars, austres)
-        ,file = paste0(data_path,"/mtcars_austres.rds"))
+saveRDS(list(mtcars, austres),
+        file = file.path(data_path, "mtcars_austres.rds"))
 
-
-## ----data-io5
-readRDS(paste0(data_path,"/mtcars.rds"))
-
-singl_obj <- readRDS(paste0(data_path,"/mtcars.rds"))
+singl_obj <- readRDS(file.path(data_path, "mtcars.rds"))
 singl_obj
 
-
-## ----data-io6
-mult_obj <- readRDS(paste0(data_path,"/mtcars_austres.rds"))
+mult_obj <- readRDS(file.path(data_path,"/mtcars_austres.rds"))
 df1 <- mult_obj[[1]]
 df2 <- mult_obj[[2]]
 
 
-## ----data-io7
 data(package="forecast")
 
 
-## ----data-io8
-gas
-# # Error: object 'gas' not found
-#
-install.packages("forecast")
-library(forecast)
-gas |> head()
 
 
-## ----data-io9
-p_load("tidyverse")
+data(gas)
 
-# add a character column to mtcars data
-mtcars2 <- rownames_to_column(mtcars, "make") |>
+head(gas,10)
+## 
+## Time Series:
+## Start = c(2000, 1)
+## End = c(2000, 10)
+## Frequency = 52
+##  [1] 70.636 71.040 68.490 65.137 67.918
+##  [6] 75.117 72.970 76.106 78.158 82.272
+## 
+
+
+mtcars2 <-
+  rownames_to_column(mtcars, "make") |>
   as_tibble()
 
-write_csv(mtcars2
-          ,file = paste0(data_path,"/mtcars2.csv"))
+write_csv(
+  mtcars2,
+  file = file.path(data_path,"mtcars2.csv"))
 
 rm("mtcars2")
 
-mtcars2 <- read_csv(paste0(data_path,"/mtcars2.csv"))
+mtcars2 <- read_csv(
+  file.path(data_path,"mtcars2.csv"))
 
+spec_csv(file.path(data_path,"mtcars2.csv"))
+## 
+## cols(
+##   make = col_character(),
+##   mpg = col_double(),
+##   cyl = col_double(),
+##   disp = col_double(),
+##   hp = col_double(),
+##   drat = col_double(),
+##   wt = col_double(),
+##   qsec = col_double(),
+##   vs = col_double(),
+##   am = col_double(),
+##   gear = col_double(),
+##   carb = col_double()
+## )
+## 
 
+parse_date("10/05/2023", format="%m/%d/%Y")
+## 
+## [1] "2023-10-05"
 
-## ----data-io11
-parse_date("10/05/2023", format = "%m/%d/%Y")
+parse_date("20/05/2023", format="%d/%m/%Y")
+## 
+## [1] "2023-05-20"
+## 
 
-parse_date("10/05/2023", format = "%d/%m/%Y")
+parse_date("10/05/2023", format="%Y-%m-%d")
+## 
+## [1] NA
+## 
 
-parse_date("10/05/2023", format = "%Y-%m-%d")
+parse_date("2023-05-10", format = "%Y-%m-%d")
+## 
+## [1] "2023-05-10"
 
-
-## ----data-io12
 parse_datetime("2023-05-14 16:42")
+## 
+## [1] "2023-05-14 16:42:00 UTC"
 
 parse_datetime("14 May, 2023", "%d %B, %Y")
+## 
+## [1] "2023-05-14 UTC"
 
 
-## ----data-io13
 parse_time("4:42pm")
+## 
+## 16:42:00
+
+typeme <- readxl_example("type-me.xlsx")
 
 
+read_excel(typeme ,sheet = "date_coercion")
+## 
+## # A tibble: 7 × 2
+##   `maybe a datetime?` explanation
+##   <chr>               <chr>
+## 1 NA                  "empty"
+## 2 41051               "date only format"
+## 3 41026.479166666664  "date and time format"
+## 4 TRUE                "boolean true"
+## 5 cabbage             "\"cabbage\""
+## 6 4.3                 "4.3 (numeric)"
+## 7 39448               "another numeric"
 
-## ----data-io14
-mtcars3 <- mtcars2 |>
-  mutate(date = "31/12/2000")
-
-write_csv(mtcars3, paste0(data_path,"/mtcars3.csv"))
-rm("mtcars3")
-
-# the column type for date is changed by providing proper formatting option
-mtcars3 <- read_csv(paste0(data_path, "/mtcars3.csv")
-                    ,col_types = list(date = col_date(format = "%d/%m/%Y")))
-
-mtcars3 |>
-  select(date, make, mpg)
-
-
-## ----data-io15,
-## # location of an example file from readr package
-file_loc <- readr_example("challenge.csv")
-spec_csv(file_loc)
-
-read_csv(file_loc, col_types = list(y=col_logical()))
-
-spec_csv(file_loc, guess_max = 1100)
-
-read_csv(file_loc, col_types = list(y=col_date())) |>
- slice(1:1003) |>
-  tail()
-
-
-## ----data-io16
-p_load("readxl")
-# use an example file from readxl package
-file_loc2 <- readxl_example("type-me.xlsx")
-
-# reading a file without specifying date column types
-read_excel(file_loc2
-           ,sheet = "date_coercion")
-
-read_excel(file_loc2
+read_excel(typeme
            ,sheet = "date_coercion"
            ,col_types = c("date", "text"))
+## 
+## # A tibble: 7 × 2
+##   `maybe a datetime?` explanation
+##   <dttm>              <chr>
+## 1 NA                  "empty"
+## 2 2016-05-23 00:00:00 "date only format"
+## 3 2016-04-28 11:30:00 "date and time format"
+## 4 NA                  "boolean true"
+## 5 NA                  "\"cabbage\""
+## 6 1904-01-05 07:12:00 "4.3 (numeric)"
+## 7 2012-01-02 00:00:00 "another numeric"
+## Warning messages:
+## 1: Expecting date in A5 / R5C1: got boolean
+## 2: Expecting date in A6 / R6C1: got 'cabbage'
+## 3: Coercing numeric to date in A7 / R7C1
+## 4: Coercing numeric to date in A8 / R8C1
+## 
 
 
-## ----data-io17
-p_load("fst")
-
-write_fst(mtcars3,
-          path = paste0(data_path, "/mtcars3.fst")
-          , compress = 100)
-
-read_fst(path = paste0(data_path,"/mtcars3.fst")
-         ,columns = c("make", "mpg", "cyl")
-         ,from = 5
-         ,to = 10)
+write_fst(
+  as_tibble(mtcars, rownames= "make"),
+  path = file.path(data_path, "mtcars3.fst"),
+  compress = 100)
 
 
-
-## ----data-io18
-read_fst(path = paste0(data_path,"/mtcars3.fst")
-         ,columns = c("make", "mpg", "cyl")
-         ,from = 5
-         ,to = 10) |>
+read_fst(
+  path = file.path(data_path,"mtcars3.fst"),
+  columns = c("make", "mpg", "cyl"),
+  from = 5,
+  to = 10) |>
   as_tibble()
+## 
+## # A tibble: 6 × 3
+##   make                mpg   cyl
+##   <chr>             <dbl> <dbl>
+## 1 Hornet Sportabout  18.7     8
+## 2 Valiant            18.1     6
+## 3 Duster 360         14.3     8
+## 4 Merc 240D          24.4     4
+## 5 Merc 230           22.8     4
+## 6 Merc 280           19.2     6
+## 
 
 
 
 
-
-## ----dbconnet-1, eval=FALSE, warning=FALSE, message=FALSE, purl=TRUE-------------
-p_load("DBI"
-       ,"odbc"
-       ,"dplyr"
-       ,"RSQLite"
-       ,"nycflights13")
-
-# setup a in memory SQLite connection
-sqlite_con <- DBI::dbConnect(drv=RSQLite::SQLite(),
-                             dsn = ":memory:")
-sqlite_con
+sqlite_con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
 
 
-## ----dbconnet-2
-# write weather table
 copy_to(sqlite_con
         ,weather
         ,"WEATHER")
 
-
-## ----dbconnet-3
 # Connecting to Snowflake
-snowflake_conn <- DBI::dbConnect(drv = odbc::odbc()
-                                ,dsn = "Snowflake"
-                                ,warehouse = "warehouse_name"
-                                ,database = "database_name"
-                                ,schema = "schema_name"
-                                ,uid = "user id"
-                                ,pwd  = "never include pwd in script")
+snowflake_conn <- DBI::dbConnect(
+  drv = odbc::odbc(),
+  dsn = "Snowflake" ,
+  warehouse = "<warehouse name>",
+  database = "<database name>",
+  schema = "<schemaname>",
+  uid = "<user id>",
+  pwd  = "<securely_retrieve_password_here>",
+  authenticator="externalbrowser"
+)
 
+# Loading library prior to setup avoids unexpected errors
+library(ROracle)
 
-## ----dbconnet-4
-## Do not run example
-p_load("ROracle")
-
-# loading ROracle library before connection avoids unexpected errors
 protocol <- "protocol"
-host <- "host of the database"
-port <- "port of the database"
-sid <- "database name"
+host <- "<host of the database>"
+port <- "<port of the database>"
+sid <- "<database name>"
 
 connect.string <- paste(
-                        "(DESCRIPTION=",
-                        "(ADDRESS=(PROTOCOL=" , protocol,
-                        ")(HOST=", host,
-                        ")(PORT=", port, "))",
-                        "(CONNECT_DATA=(SID=", sid, ")))",
-                sep = "" )
+   "(DESCRIPTION=",
+  "(ADDRESS=(PROTOCOL=" , protocol,
+  ")(HOST=", host,
+  ")(PORT=", port, "))",
+   "(CONNECT_DATA=(SID=", sid, ")))",
+  sep = "" )
 
-oracle_con <- DBI::dbConnect(dbDriver("oracle")
-                             ,dbname = connect.string
-                             ,uid
-                             ,pwd )
-
-
-## ----security-1
-p_load("keyring")
-
-# set a key prompts a box to insert password
-key_set(service = "database_service_name"
-        ,username = "user_id")
-
-# the retrieved credentials are used in the connection directly
-snowflake_conn <- DBI::dbConnect(drv = odbc::odbc()
-                                ,dsn = "database_service_name"
-                                ,warehouse = "warehouse_name"
-                                ,database = "database_name"
-                                ,schema = "schema_name"
-                                ,uid = kingring::key_list("database_service_name")[1,2]
-                                ,pwd  = kingring::key_get("database_service_name",
-                                                         "user_id"))
+oracle_con <- DBI::dbConnect(
+  dbDriver("oracle"),
+  dbname = connect.string,
+  uid,
+  pwd )
 
 
-## ----security-2
-snowflake_conn <- DBI::dbConnect(drv = odbc::odbc()
-                                ,dsn = "database_service_name"
-                                ,warehouse = "warehouse_name"
-                                ,database = "database_name"
-                                ,schema = "schema_name"
-                                ,uid = rstudioapi::askForPassword("type user id")
-                                ,pwd  = rstudioapi::askForPassword("type password")
-                               )
+key_set(service = "<database service name>",
+        username = "<user id>")
+
+# Retrieved credentials are used in the connection directly
+snowflake_conn <- DBI::dbConnect(
+  drv = odbc::odbc(),
+  dsn = "<database service name>",
+  warehouse = "<warehouse name>",
+  database = "<database name>",
+  schema = "<schema name>",
+  uid = keyring::key_list("<database service name>")[1,2],
+  pwd = keyring::key_get("<database service name>","<user id>"))
 
 
-## ----sql-1
-p_load("DBI"
-       ,"dplyr"
-       ,"dbplyr"
-       ,"glue")
 
 
-## ----sql-2
-sqlite_con <- DBI::dbConnect(drv=RSQLite::SQLite(),
-                             dsn = ":memory:")
+
+## snowflake_conn <- DBI::dbConnect(drv = odbc::odbc()
+##                                 ,dsn = "<database service name>"
+##                                 ,warehouse = "<warehouse name>"
+##                                 ,database = "<database name>"
+##                                 ,schema = "<schema name>"
+##                                 ,uid = rstudioapi::askForPassword("type user id")
+##                                 ,pwd  = rstudioapi::askForPassword("type password")
+##                                )
 
 
-## ----sql-3
-q1 <- dbGetQuery(sqlite_con,
+sqlite_con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+
+# Write weather table
+copy_to(sqlite_con ,weather ,"WEATHER")
+
+weather_ewr <- dbGetQuery(sqlite_con,
                 statement = "select *
-                 from weather
-                 where origin = 'EWR' ") |>
-  as_tibble()
-q1
-
-
-## ----sql-4
-# the full query should be enclosed by double quotes
-# to avoid cancellation with single quote around EWR.
-dbGetQuery(sqlite_con,
-           statement = "select *
-                 from weather
-                 where origin = 'EWR' ")
-
-
-## ----sql-5
-# select *
-# from weather
-# where temp >= 50
-# and wind_dir > 250
-
-
-## ----sql-6
-
-q2 <- dbGetQuery(sqlite_con,
-                 statement = readr::read_file(paste0(data_path,"/weather.sql"))) |>
+                  from weather
+                  where origin = 'EWR' ") |>
   as_tibble()
 
-q2
+
+weather_ewr
+## 
+## # A tibble: 8,703 × 15
+##    origin  year month   day  hour  temp
+##    <chr>  <int> <int> <int> <int> <dbl>
+##  1 EWR     2013     1     1     1  39.0
+##  2 EWR     2013     1     1     2  39.0
+##  3 EWR     2013     1     1     3  39.0
+##  4 EWR     2013     1     1     4  39.9
+##  5 EWR     2013     1     1     5  39.0
+##  6 EWR     2013     1     1     6  37.9
+##  7 EWR     2013     1     1     7  39.0
+##  8 EWR     2013     1     1     8  39.9
+##  9 EWR     2013     1     1     9  39.9
+## 10 EWR     2013     1     1    10  41
+## # ℹ 8,693 more rows
+## # ℹ 9 more variables: dewp <dbl>,
+## #   humid <dbl>, wind_dir <dbl>,
+## #   wind_speed <dbl>, wind_gust <dbl>,
+## #   precip <dbl>, pressure <dbl>,
+## #   visib <dbl>, time_hour <dbl>
+
+select *
+from weather
+where temp >= 50
+and wind_dir > 250
+
+weather_temp <- dbGetQuery(sqlite_con,
+                 statement = readr::read_file(
+                   file.path(data_path,"weather.sql"))) |>
+  as_tibble()
 
 
-## ----sql-7
-
-q3 <- tbl(sqlite_con, "WEATHER") |>
+weather_summary <- tbl(sqlite_con, "WEATHER") |>
   group_by(month, origin) |>
   tally() |>
   ungroup() |>
@@ -313,10 +319,7 @@ q3 <- tbl(sqlite_con, "WEATHER") |>
               ,values_from = "n") |>
   collect()
 
-q3
 
-
-## ----sql-8
 
 origin_par <- c("EWR", "JFK" ,"LGA")
 origin_sql <- glue_sql("select
@@ -338,15 +341,16 @@ for(i in seq_along(origin_par)){
 origin_data[[1]] |>
   head(3)
 
+
 origin_data[[2]] |>
   head(3)
 
 
 
-## ----sql-9
 
-first_date <- "2013-01-01"
-second_date <- "2013-05-31"
+
+start_date <- "2013-01-01"
+end_date <- "2013-05-31"
 
 query <- "select *
 from(
@@ -359,13 +363,13 @@ from(
 where date >= ?start_ts
 and date <= ?end_ts
 "
-quey_interpolate <- sqlInterpolate(sqlite_con,
-                                   query,
-                                    start_ts = first_date
-                                   ,end_ts = second_date )
+query_interpolate <- sqlInterpolate(
+  sqlite_con,
+  query,
+  start_ts = start_date,
+  end_ts = start_date )
 
-q4 <- dbGetQuery(sqlite_con, quey_interpolate) |>
+query_extract <- dbGetQuery(
+  sqlite_con, query_interpolate) |>
   as_tibble()
-
-q4
 
