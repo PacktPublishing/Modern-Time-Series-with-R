@@ -1,41 +1,35 @@
-## ----ch11-packages, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, echo=TRUE, purl=TRUE,size="tiny"----
-#install.packages("pacman")
 library(pacman)
-p_load("datasets"
+p_load("conflicted"
+       ,"datasets"
        ,"mFilter"
        ,"FKF"
        ,"qcc"
        ,"tidyverse"
-       ,"zoo"
-        )
-
-theme_set(theme_bw())
+       ,"tstibble"
+       ,"zoo" )
 
 
 
-## ----ch11-nile-plot
-nile_dt <- tibble(year = zoo::index(Nile)
-                  ,flow = Nile)
+nile_dt <- Nile |>
+  as_tsibble() |>
+  rename(year = index, flow = value)
 
-nile_dt |> 
-  ggplot() +
-  geom_line(aes(year, flow)) +
-  theme_bw() +
-  labs(x=""
-       ,y=latex2exp::TeX(paste0("Flow in $\\10^8m^3$"))
-       ,title= "Annual flow of Nile, 1871-1970") +
-  theme(axis.text = element_text(size=12))
+nile_dt |>
+  ggplot(aes(year, flow)) +
+  geom_line() +
+  scale_y_continuous(limits = c(400, 1400), breaks = seq(400, 1400, by=400))
 
 
 
-## ----ch11-peds-sat-smooth
+
 smooth_list <- list()
 alpha_vec <- c(0.2, 0.4, 0.7)
-for(i in seq_along(alpha_vec))
+for (i in seq_along(alpha_vec))
 {
-  smooth_list[[i]] <- ewmaSmooth(x=nile_dt$year, 
-                                 y=nile_dt$flow, 
-                                 lambda = alpha_vec[i])$y 
+  smooth_list[[i]] <- ewmaSmooth(
+    x = nile_dt$year, 
+    y  =nile_dt$flow, 
+    lambda = alpha_vec[i])$y 
 }  
 names(smooth_list) <- paste0("alpha_",alpha_vec)  
 
@@ -46,84 +40,73 @@ nile_ewma <- nile_dt |>
 
 
 
-
-## ----ch11-peds-sat-smooth-plot
 nile_ewma |> 
   pivot_longer(cols = starts_with("alpha_"),
-               names_to = "smooting_coef",
+               names_to = "smoothing_coef",
               values_to = "smoothed_flow") |> 
-  ggplot(aes(x = year, y = smoothed_flow)) +
-  geom_line(col = "blue", linewidth = 0.9) +
-  facet_grid(smooting_coef~.) +
-  geom_line(aes(y = flow)) +
-  labs(x = "Year"
-       ,y = "Observed and smoothed annual flow"
-       , title = latex2exp::TeX(paste0("EWMA smoothing with $\\alpha=$ 0.2, 0.4 and 0.7"))
-       ,subtitle = "River Nile's annual flow smothing") +
-  theme_bw() +
-  theme(strip.text = element_text(size=12)
-        ,axis.text = element_text(size=12))
+  ggplot(aes(x = year, y = smoothed_flow)) + 
+  geom_line(linewidth = 0.6) +
+  geom_line(aes(y = flow), color = "grey", linewidth = 0.7 ) +
+  scale_y_continuous(limits = c(400, 1400), 
+                     breaks = seq(400, 1400, by=400)) +
+  facet_grid(smoothing_coef~.) +
+  labs(x = "" ,y = "")
 
 
 
-## ----ch11-mafilter-1
 ma_filter <- nile_dt |> 
-  mutate("MA(2)" = stats::filter(flow, filter = c(0.6,0.4), 
-                                    method="convolution", sides=1)
-         ,"MA(3)" = stats::filter(flow, filter = rep(1/3,3), 
-                                     method="convolution", sides=1))
+  mutate("MA(2)" = stats::filter(
+            flow, 
+            filter = c(0.6,0.4), 
+            method="convolution", sides = 1)
+         ,"MA(3)" = stats::filter(
+           flow, 
+           filter = rep(1/3,3), 
+           method = "convolution", sides = 1))
 
 
-## ----ch11-mafilter-plot
 ma_filter |> 
   pivot_longer(cols = starts_with("MA")
                ,names_to = "type"
                ,values_to = "filtered") |> 
   ggplot()  +
-  geom_line(aes(year, flow)) +
-  geom_line(aes(year, filtered),col="blue", linewidth=0.9) +
+  geom_line(aes(year, flow), col="grey", linewidth=0.7) +
+  geom_line(aes(year, filtered), linewidth = 0.6) +
+  scale_y_continuous(limits = c(400, 1400), 
+                     breaks = seq(400, 1400, by=400)) +
   facet_grid( type~.) +
-  labs(x="Year"
-       ,y="River Nile's annual flow smothing"
-       ,title="Linear filtering using Moving Average on river Nile's annual flow") +
-       theme_bw() +
-  theme(axis.text = element_text(size=12)
-        ,strip.text = element_text(size=12))
+  labs(x = ""  ,y = "" ) 
 
 
-
-
-## ----ch11-hpfilter
 data(unemp)
-unemp_hp <- 
-  mFilter(unemp, filter="HP")
+unemp_hp <- mFilter(unemp, filter = "HP")
 
 # organize
-hp_filter <- 
-  tibble(Quarter = zoo::index(unemp)
-         ,Unemployment = unemp
-         ,`Estimated trend`= as.numeric(unemp_hp$trend)
-         ,`Estimated cycle`= as.numeric(unemp_hp$cycle))
+hp_filter <- unemp |> 
+  as_tsibble() |> 
+  mutate(trend = as.numeric(unemp_hp$trend),
+         cycle = as.numeric(unemp_hp$cycle)) |> 
+  rename(quarter = index,
+         unemployment = value)
 
 
-## ----ch11-hpfilter-plot
+unemp_hp$lambda
+## 
+## [1] 129600
+
+
 hp_filter |> 
-  pivot_longer(cols = starts_with("Estimated")
-               ,names_to = "Component"
-               ,values_to = "Estimate") |> 
+  pivot_longer(cols = c(trend, cycle)
+               ,names_to = "component"
+               ,values_to = "estimate") |> 
   ggplot() +
-  geom_line(aes(Quarter, Unemployment)) +
-  geom_line(aes(Quarter, Estimate), col="blue", linewidth=0.9) +
-  facet_grid(Component~.) +
-  labs(title = "Estimated trend and cycle from Hodrick-Prescott filter on U.S unemployment rate") +
-  theme_bw() +
-  theme(axis.text = element_text(size=12)
-        ,strip.text = element_text(size=12))
+  geom_line(aes(quarter, unemployment), linewidth=0.8, color ="grey") +
+  geom_line(aes(quarter, estimate),
+            linewidth = 0.7 ) +
+  facet_grid(component~.) +
+  labs(x = "", y = "") 
 
 
-
-
-## ----ch11-kf-1
 
 y <- Nile
 
@@ -149,12 +132,12 @@ fkf_obj <- fkf(a0, P0, dt, ct, Tt, Zt,
                GGt = matrix(fit_fkf$par[2]),
                yt = rbind(y))
 
-# check the parameter estimate
+
 fit_fkf$par
+## 
+##      HHt       GGt
+## 1300.777 15247.773
 
-
-
-## ----ch11-kf-2
 
 kf_filter <- nile_dt |> 
   mutate("KF filtered" = as.numeric(fkf_obj$att) 
@@ -162,24 +145,25 @@ kf_filter <- nile_dt |>
 
 
 
-## ----ch11-kf-3
-
-head(kf_filter)
-
-tail(kf_filter)
-
-
-
-## ----ch11-nilekf-plot, eval=TRUE, cache=TRUE, warning=FALSE, message=FALSE, echo=TRUE, purl=TRUE, results='asis', fig.cap="Kalman filter on Nile data", fig.width=8, fig.height=4, size='tiny'----
-
-kf_filter |> 
-  ggplot() +
-  geom_line(aes(year, flow)) +
-  geom_line(aes(year, `KF filtered`), col="blue", linewidth=0.9) +
-  labs(x=""
-       ,y="Annual flow"
-       ,title="Kalman filter using a local level model on Nile data") +
-  theme(axis.text = element_text(size=12)
-        ,strip.text = element_text(size=12))
-
-
+head(kf_filter, 5)
+## 
+## # A tsibble: 5 x 4 [1Y]
+##    year  flow `KF filtered` `Kalman gain`
+##   <dbl> <dbl>         <dbl>         <dbl>
+## 1  1871  1120         1120        0.00652
+## 2  1872  1160         1123.       0.0841
+## 3  1873   963         1100.       0.145
+## 4  1874  1210         1121.       0.187
+## 5  1875  1160         1129.       0.214
+## 
+tail(kf_filter, 5)
+## 
+## # A tsibble: 5 x 4 [1Y]
+##    year  flow `KF filtered` `Kalman gain`
+##   <dbl> <dbl>         <dbl>         <dbl>
+## 1  1966   746          907.         0.253
+## 2  1967   919          910.         0.253
+## 3  1968   718          862.         0.253
+## 4  1969   714          824.         0.253
+## 5  1970   740          803.         0.253
+## 
